@@ -1,4 +1,4 @@
-# My Pomodoro Timer
+# pomodoro timer
 
 A clean Pomodoro timer app built with React and Vite.
 
