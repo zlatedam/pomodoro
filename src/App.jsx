@@ -29,7 +29,7 @@ function App() {
   
   // Tag state
   const [currentTag, setCurrentTag] = useState('#study')
-  const [savedTags, setSavedTags] = useState(['#study', '#coding', '#writing'])
+  const [savedTags, setSavedTags] = useState([])
   const [editingTag, setEditingTag] = useState(null)
   const [tempTagValue, setTempTagValue] = useState('')
   
@@ -41,11 +41,72 @@ function App() {
   const intervalRef = useRef(null)
   const fileInputRef = useRef(null)
 
-  // Load sessions from Supabase on mount
+  // Load everything from Supabase on mount
   useEffect(() => {
-    loadSessions()
-    loadSettings()
+    loadAllData()
   }, [])
+
+  const loadAllData = async () => {
+    try {
+      await Promise.all([
+        loadSettings(),
+        loadTags(),
+        loadSessions()
+      ])
+      setIsLoading(false)
+    } catch (error) {
+      console.error('Error loading data:', error)
+      setIsLoading(false)
+    }
+  }
+
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('id', 1)
+        .single()
+      
+      if (error) throw error
+      
+      if (data) {
+        setPomodoroDuration(data.pomodoro_duration)
+        setShortBreakDuration(data.short_break_duration)
+        setLongBreakDuration(data.long_break_duration)
+        setAutoStartBreaks(data.auto_start_breaks)
+        setAutoStartPomodoros(data.auto_start_pomodoros)
+        setLongBreakInterval(data.long_break_interval)
+        setTheme(data.theme)
+        setCurrentTag(data.current_tag)
+        setTimeLeft(data.pomodoro_duration * 60)
+      }
+      
+      const lastReminder = localStorage.getItem('lastBackupReminder')
+      if (lastReminder) {
+        setLastBackupReminder(new Date(lastReminder))
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error)
+    }
+  }
+
+  const loadTags = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tags')
+        .select('tag')
+        .order('created_at', { ascending: true })
+      
+      if (error) throw error
+      
+      const tags = data?.map(item => item.tag) || ['#study']
+      setSavedTags(tags)
+    } catch (error) {
+      console.error('Error loading tags:', error)
+      setSavedTags(['#study'])
+    }
+  }
 
   const loadSessions = async () => {
     try {
@@ -57,58 +118,42 @@ function App() {
       if (error) throw error
       
       setSessions(data || [])
-      
-      // Extract unique tags
-      const tags = new Set(['#study', '#coding', '#writing'])
-      data?.forEach(session => tags.add(session.tag))
-      setSavedTags(Array.from(tags))
-      
-      setIsLoading(false)
     } catch (error) {
       console.error('Error loading sessions:', error)
-      setIsLoading(false)
     }
   }
 
-  const loadSettings = () => {
-    const stored = localStorage.getItem('pomodoroSettings')
-    if (stored) {
-      const settings = JSON.parse(stored)
-      setPomodoroDuration(settings.pomodoroDuration || 25)
-      setShortBreakDuration(settings.shortBreakDuration || 5)
-      setLongBreakDuration(settings.longBreakDuration || 15)
-      setAutoStartBreaks(settings.autoStartBreaks || false)
-      setAutoStartPomodoros(settings.autoStartPomodoros || false)
-      setLongBreakInterval(settings.longBreakInterval || 4)
-      setTheme(settings.theme || 'device')
-      setCurrentTag(settings.currentTag || '#study')
-      setSavedTags(settings.savedTags || ['#study', '#coding', '#writing'])
-    }
-    
-    const lastReminder = localStorage.getItem('lastBackupReminder')
-    if (lastReminder) {
-      setLastBackupReminder(new Date(lastReminder))
+  const saveSettings = async (updates) => {
+    try {
+      const { error } = await supabase
+        .from('user_settings')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', 1)
+      
+      if (error) throw error
+    } catch (error) {
+      console.error('Error saving settings:', error)
     }
   }
 
-  const saveSettings = () => {
-    const settings = {
-      pomodoroDuration,
-      shortBreakDuration,
-      longBreakDuration,
-      autoStartBreaks,
-      autoStartPomodoros,
-      longBreakInterval,
-      theme,
-      currentTag,
-      savedTags
-    }
-    localStorage.setItem('pomodoroSettings', JSON.stringify(settings))
-  }
-
+  // Save settings whenever they change
   useEffect(() => {
-    saveSettings()
-  }, [pomodoroDuration, shortBreakDuration, longBreakDuration, autoStartBreaks, autoStartPomodoros, longBreakInterval, theme, currentTag, savedTags])
+    if (!isLoading) {
+      saveSettings({
+        pomodoro_duration: pomodoroDuration,
+        short_break_duration: shortBreakDuration,
+        long_break_duration: longBreakDuration,
+        auto_start_breaks: autoStartBreaks,
+        auto_start_pomodoros: autoStartPomodoros,
+        long_break_interval: longBreakInterval,
+        theme: theme,
+        current_tag: currentTag
+      })
+    }
+  }, [pomodoroDuration, shortBreakDuration, longBreakDuration, autoStartBreaks, autoStartPomodoros, longBreakInterval, theme, currentTag])
 
   // Check for backup reminder (weekly)
   useEffect(() => {
@@ -176,7 +221,6 @@ function App() {
         type: 'pomodoro'
       }
       
-      // Save to Supabase
       try {
         const { data, error } = await supabase
           .from('sessions')
@@ -259,7 +303,7 @@ function App() {
     }
   }
 
-  const handleSaveCurrentTag = () => {
+  const handleSaveCurrentTag = async () => {
     const trimmedTag = tempTagValue.trim()
     if (!trimmedTag) return
     
@@ -267,23 +311,81 @@ function App() {
     setCurrentTag(formattedTag)
     
     if (!savedTags.includes(formattedTag)) {
-      setSavedTags(prev => [...prev, formattedTag])
+      try {
+        const { error } = await supabase
+          .from('tags')
+          .insert([{ tag: formattedTag }])
+        
+        if (error && error.code !== '23505') throw error // Ignore duplicate errors
+        
+        setSavedTags(prev => [...prev, formattedTag])
+      } catch (error) {
+        console.error('Error saving tag:', error)
+      }
     }
   }
 
-  const handleEditSavedTag = (oldTag, newTag) => {
+  const handleEditSavedTag = async (oldTag, newTag) => {
     const formattedTag = newTag.startsWith('#') ? newTag : `#${newTag}`
-    setSavedTags(prev => prev.map(tag => tag === oldTag ? formattedTag : tag))
-    if (currentTag === oldTag) {
-      setCurrentTag(formattedTag)
+    
+    try {
+      // Update tag in tags table
+      const { error: tagError } = await supabase
+        .from('tags')
+        .update({ tag: formattedTag })
+        .eq('tag', oldTag)
+      
+      if (tagError) throw tagError
+      
+      // Update tag in all sessions
+      const { error: sessionError } = await supabase
+        .from('sessions')
+        .update({ tag: formattedTag })
+        .eq('tag', oldTag)
+      
+      if (sessionError) throw sessionError
+      
+      setSavedTags(prev => prev.map(tag => tag === oldTag ? formattedTag : tag))
+      
+      if (currentTag === oldTag) {
+        setCurrentTag(formattedTag)
+      }
+      
+      await loadSessions()
+    } catch (error) {
+      console.error('Error editing tag:', error)
     }
+    
     setEditingTag(null)
   }
 
-  const handleDeleteTag = (tagToDelete) => {
-    setSavedTags(prev => prev.filter(tag => tag !== tagToDelete))
-    if (currentTag === tagToDelete) {
-      setCurrentTag('#study')
+  const handleDeleteTag = async (tagToDelete) => {
+    try {
+      // Update sessions with deleted tag to #study
+      const { error: sessionError } = await supabase
+        .from('sessions')
+        .update({ tag: '#study' })
+        .eq('tag', tagToDelete)
+      
+      if (sessionError) throw sessionError
+      
+      // Delete tag from tags table
+      const { error: tagError } = await supabase
+        .from('tags')
+        .delete()
+        .eq('tag', tagToDelete)
+      
+      if (tagError) throw tagError
+      
+      setSavedTags(prev => prev.filter(tag => tag !== tagToDelete))
+      
+      if (currentTag === tagToDelete) {
+        setCurrentTag('#study')
+      }
+      
+      await loadSessions()
+    } catch (error) {
+      console.error('Error deleting tag:', error)
     }
   }
 
@@ -462,10 +564,16 @@ function App() {
         
         if (error) throw error
         
-        const allTags = new Set(savedTags)
-        newSessions.forEach(session => allTags.add(session.tag))
-        setSavedTags(Array.from(allTags))
+        // Extract and save unique tags
+        const uniqueTags = new Set(newSessions.map(s => s.tag))
+        for (const tag of uniqueTags) {
+          await supabase
+            .from('tags')
+            .insert([{ tag }])
+            .select()
+        }
         
+        await loadTags()
         await loadSessions()
         alert(`Imported ${parsedSessions.length} sessions!`)
       } catch (error) {
