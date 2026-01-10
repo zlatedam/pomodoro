@@ -213,6 +213,41 @@ function App() {
   const handleTimerComplete = async () => {
     if (mode === 'pomodoro') {
       const now = new Date()
+      
+      // Check if a session was just saved (within last 5 seconds)
+      try {
+        const { data: recentSessions, error: checkError } = await supabase
+          .from('sessions')
+          .select('created_at')
+          .order('created_at', { ascending: false })
+          .limit(1)
+        
+        if (checkError) throw checkError
+        
+        if (recentSessions && recentSessions.length > 0) {
+          const lastSessionTime = new Date(recentSessions[0].created_at)
+          const secondsSinceLastSession = (now - lastSessionTime) / 1000
+          
+          // If last session was within 5 seconds, skip saving (duplicate from another device)
+          if (secondsSinceLastSession < 5) {
+            console.log('Skipping duplicate session save')
+            const newSessionCount = sessionsCompleted + 1
+            setSessionsCompleted(newSessionCount)
+            
+            if (newSessionCount % longBreakInterval === 0) {
+              switchMode('longBreak')
+              if (autoStartBreaks) setIsRunning(true)
+            } else {
+              switchMode('shortBreak')
+              if (autoStartBreaks) setIsRunning(true)
+            }
+            return
+          }
+        }
+      } catch (error) {
+        console.error('Error checking recent sessions:', error)
+      }
+      
       const newSession = {
         timestamp: formatDateTime(now),
         date: formatDate(now),
@@ -316,7 +351,7 @@ function App() {
           .from('tags')
           .insert([{ tag: formattedTag }])
         
-        if (error && error.code !== '23505') throw error // Ignore duplicate errors
+        if (error && error.code !== '23505') throw error
         
         setSavedTags(prev => [...prev, formattedTag])
       } catch (error) {
@@ -329,7 +364,6 @@ function App() {
     const formattedTag = newTag.startsWith('#') ? newTag : `#${newTag}`
     
     try {
-      // Update tag in tags table
       const { error: tagError } = await supabase
         .from('tags')
         .update({ tag: formattedTag })
@@ -337,7 +371,6 @@ function App() {
       
       if (tagError) throw tagError
       
-      // Update tag in all sessions
       const { error: sessionError } = await supabase
         .from('sessions')
         .update({ tag: formattedTag })
@@ -361,7 +394,6 @@ function App() {
 
   const handleDeleteTag = async (tagToDelete) => {
     try {
-      // Update sessions with deleted tag to #study
       const { error: sessionError } = await supabase
         .from('sessions')
         .update({ tag: '#study' })
@@ -369,7 +401,6 @@ function App() {
       
       if (sessionError) throw sessionError
       
-      // Delete tag from tags table
       const { error: tagError } = await supabase
         .from('tags')
         .delete()
@@ -564,7 +595,6 @@ function App() {
         
         if (error) throw error
         
-        // Extract and save unique tags
         const uniqueTags = new Set(newSessions.map(s => s.tag))
         for (const tag of uniqueTags) {
           await supabase
@@ -588,21 +618,21 @@ function App() {
 
   const handlePomodoroDurationChange = (newDuration) => {
     setPomodoroDuration(newDuration)
-    if (mode === 'pomodoro' && !isRunning) {
+    if (mode === 'pomodoro') {
       setTimeLeft(newDuration * 60)
     }
   }
 
   const handleShortBreakDurationChange = (newDuration) => {
     setShortBreakDuration(newDuration)
-    if (mode === 'shortBreak' && !isRunning) {
+    if (mode === 'shortBreak') {
       setTimeLeft(newDuration * 60)
     }
   }
 
   const handleLongBreakDurationChange = (newDuration) => {
     setLongBreakDuration(newDuration)
-    if (mode === 'longBreak' && !isRunning) {
+    if (mode === 'longBreak') {
       setTimeLeft(newDuration * 60)
     }
   }
