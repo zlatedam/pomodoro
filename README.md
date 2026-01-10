@@ -1,16 +1,22 @@
-# pomodoro timer
+## Pomodoro Timer
 
-A clean Pomodoro timer app built with React and Vite.
+A web-based Pomodoro timer with cloud sync and session tracking.
 
-## Features (Current)
+## Live Site
 
-- Dark/Light theme toggle
-- Basic timer display (25:00)
-- Responsive layout
+https://pomodoro-rho-one.vercel.app/
 
-## Next Steps
-1. Add actual timer countdown functionality
-2. Implement session tracking
-3. Build statistics dashboard
-4. Add CSV import/export
-5. Customize colors and styling
+## Tech Stack
+
+- React + Vite
+- Supabase (database)
+- Vercel (hosting)
+
+## Features
+
+- Customizable timer durations
+- Session tracking with tags
+- Reports with weekly/monthly/yearly charts
+- Cloud sync across devices
+- CSV import/export - specific capability to import data from previous sites / apps
+- Session recovery across devices
