@@ -945,3 +945,52 @@ main {
   font-size: 0.875rem;
   min-width: auto;
 }
+
+/* Resume Prompt */
+.resume-prompt {
+  text-align: center;
+}
+
+.resume-prompt h2 {
+  margin-bottom: 1.5rem;
+}
+
+.resume-prompt p {
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.resume-tag {
+  color: #e74c3c;
+  font-weight: 600;
+}
+
+.resume-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.resume-btn,
+.fresh-btn {
+  padding: 0.75rem 2rem !important;
+  font-size: 1rem;
+  min-width: 120px;
+}
+
+.resume-btn {
+  background-color: #27ae60;
+}
+
+.resume-btn:hover {
+  background-color: #229954;
+}
+
+.fresh-btn {
+  background-color: #95a5a6;
+}
+
+.fresh-btn:hover {
+  background-color: #7f8c8d;
+}

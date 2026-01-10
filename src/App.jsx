@@ -12,6 +12,8 @@ function App() {
   const [chartView, setChartView] = useState('week')
   const [chartOffset, setChartOffset] = useState(0)
   const [chartTooltip, setChartTooltip] = useState({ show: false, x: 0, y: 0, value: '', label: '' })
+  const [showResumePrompt, setShowResumePrompt] = useState(false)
+  const [resumeTimerData, setResumeTimerData] = useState(null)
   
   // Timer settings
   const [pomodoroDuration, setPomodoroDuration] = useState(25)
@@ -40,6 +42,7 @@ function App() {
   const [editingSession, setEditingSession] = useState(null)
   
   const intervalRef = useRef(null)
+  const saveTimerStateIntervalRef = useRef(null)
   const fileInputRef = useRef(null)
 
   // Load everything from Supabase on mount
@@ -52,7 +55,8 @@ function App() {
       await Promise.all([
         loadSettings(),
         loadTags(),
-        loadSessions()
+        loadSessions(),
+        checkForPendingTimer()
       ])
       setIsLoading(false)
     } catch (error) {
@@ -122,6 +126,90 @@ function App() {
     } catch (error) {
       console.error('Error loading sessions:', error)
     }
+  }
+
+  const checkForPendingTimer = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('timer_state')
+        .eq('id', 1)
+        .single()
+      
+      if (error) throw error
+      
+      if (data?.timer_state) {
+        const timerState = data.timer_state
+        const savedAt = new Date(timerState.saved_at)
+        const now = new Date()
+        const minutesElapsed = (now - savedAt) / 1000 / 60
+        
+        if (minutesElapsed < 60 && timerState.time_left > 0) {
+          setResumeTimerData(timerState)
+          setShowResumePrompt(true)
+        }
+      }
+    } catch (error) {
+      console.error('Error checking for pending timer:', error)
+    }
+  }
+
+  const handleResumeTimer = () => {
+    if (resumeTimerData) {
+      setMode(resumeTimerData.mode)
+      setTimeLeft(resumeTimerData.time_left)
+      setCurrentTag(resumeTimerData.current_tag)
+      setShowResumePrompt(false)
+      setResumeTimerData(null)
+    }
+  }
+
+  const handleStartFresh = async () => {
+    setShowResumePrompt(false)
+    setResumeTimerData(null)
+    await clearTimerState()
+  }
+
+  const saveTimerState = async () => {
+    if (!isRunning) return
+    
+    try {
+      const { error } = await supabase
+        .from('user_settings')
+        .update({
+          timer_state: {
+            mode,
+            time_left: timeLeft,
+            current_tag: currentTag,
+            saved_at: new Date().toISOString()
+          }
+        })
+        .eq('id', 1)
+      
+      if (error) throw error
+    } catch (error) {
+      console.error('Error saving timer state:', error)
+    }
+  }
+
+  const clearTimerState = async () => {
+    try {
+      const { error } = await supabase
+        .from('user_settings')
+        .update({ timer_state: null })
+        .eq('id', 1)
+      
+      if (error) throw error
+    } catch (error) {
+      console.error('Error clearing timer state:', error)
+    }
+  }
+
+  const getModeLabel = (modeStr) => {
+    if (modeStr === 'pomodoro') return 'Pomodoro'
+    if (modeStr === 'shortBreak') return 'Short Break'
+    if (modeStr === 'longBreak') return 'Long Break'
+    return modeStr
   }
 
   const saveSettings = async (updates) => {
@@ -211,7 +299,27 @@ function App() {
     return () => clearInterval(intervalRef.current)
   }, [isRunning, timeLeft])
 
+  useEffect(() => {
+    if (isRunning) {
+      saveTimerStateIntervalRef.current = setInterval(() => {
+        saveTimerState()
+      }, 10000)
+    } else {
+      if (saveTimerStateIntervalRef.current) {
+        clearInterval(saveTimerStateIntervalRef.current)
+      }
+    }
+
+    return () => {
+      if (saveTimerStateIntervalRef.current) {
+        clearInterval(saveTimerStateIntervalRef.current)
+      }
+    }
+  }, [isRunning, mode, timeLeft, currentTag])
+
   const handleTimerComplete = async () => {
+    await clearTimerState()
+    
     if (mode === 'pomodoro') {
       const now = new Date()
       
@@ -230,7 +338,6 @@ function App() {
           .select()
         
         if (error) {
-          // If duplicate, just skip silently (another device already saved it)
           if (error.code === '23505') {
             console.log('Session already saved by another device')
             await loadSessions()
@@ -298,10 +405,15 @@ function App() {
 
   const handleStartPause = () => {
     setIsRunning(!isRunning)
+    if (isRunning) {
+      saveTimerState()
+    }
   }
 
-  const handleReset = () => {
+  const handleReset = async () => {
     setIsRunning(false)
+    await clearTimerState()
+    
     if (mode === 'pomodoro') {
       setTimeLeft(pomodoroDuration * 60)
     } else if (mode === 'shortBreak') {
@@ -878,6 +990,24 @@ function App() {
 
   return (
     <div className={`app ${activeTheme}`}>
+      {showResumePrompt && resumeTimerData && (
+        <div className="settings-modal">
+          <div className="settings-content resume-prompt">
+            <h2>Resume Timer?</h2>
+            <p>You had {formatTime(resumeTimerData.time_left)} left in your {getModeLabel(resumeTimerData.mode)} session.</p>
+            <p className="resume-tag">Tag: {resumeTimerData.current_tag}</p>
+            <div className="resume-actions">
+              <button className="resume-btn" onClick={handleResumeTimer}>
+                Resume
+              </button>
+              <button className="fresh-btn" onClick={handleStartFresh}>
+                Start Fresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header>
         <h1>My Pomodoro</h1>
         <div className="header-actions">
