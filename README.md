@@ -2,10 +2,6 @@
 
 A web-based Pomodoro timer with cloud sync and session tracking.
 
-## Live Site
-
-https://pomodoro-rho-one.vercel.app/
-
 ## Tech Stack
 
 - React + Vite
