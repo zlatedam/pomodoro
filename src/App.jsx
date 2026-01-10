@@ -37,6 +37,7 @@ function App() {
   const [sessions, setSessions] = useState([])
   const [lastBackupReminder, setLastBackupReminder] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [editingSession, setEditingSession] = useState(null)
   
   const intervalRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -214,40 +215,6 @@ function App() {
     if (mode === 'pomodoro') {
       const now = new Date()
       
-      // Check if a session was just saved (within last 5 seconds)
-      try {
-        const { data: recentSessions, error: checkError } = await supabase
-          .from('sessions')
-          .select('created_at')
-          .order('created_at', { ascending: false })
-          .limit(1)
-        
-        if (checkError) throw checkError
-        
-        if (recentSessions && recentSessions.length > 0) {
-          const lastSessionTime = new Date(recentSessions[0].created_at)
-          const secondsSinceLastSession = (now - lastSessionTime) / 1000
-          
-          // If last session was within 5 seconds, skip saving (duplicate from another device)
-          if (secondsSinceLastSession < 5) {
-            console.log('Skipping duplicate session save')
-            const newSessionCount = sessionsCompleted + 1
-            setSessionsCompleted(newSessionCount)
-            
-            if (newSessionCount % longBreakInterval === 0) {
-              switchMode('longBreak')
-              if (autoStartBreaks) setIsRunning(true)
-            } else {
-              switchMode('shortBreak')
-              if (autoStartBreaks) setIsRunning(true)
-            }
-            return
-          }
-        }
-      } catch (error) {
-        console.error('Error checking recent sessions:', error)
-      }
-      
       const newSession = {
         timestamp: formatDateTime(now),
         date: formatDate(now),
@@ -262,9 +229,15 @@ function App() {
           .insert([newSession])
           .select()
         
-        if (error) throw error
-        
-        if (data && data[0]) {
+        if (error) {
+          // If duplicate, just skip silently (another device already saved it)
+          if (error.code === '23505') {
+            console.log('Session already saved by another device')
+            await loadSessions()
+          } else {
+            throw error
+          }
+        } else if (data && data[0]) {
           setSessions(prev => [data[0], ...prev])
         }
       } catch (error) {
@@ -423,6 +396,41 @@ function App() {
   const openTagModal = () => {
     setTempTagValue(currentTag)
     setShowTagModal(true)
+  }
+
+  const handleEditSession = async (sessionId, updates) => {
+    try {
+      const { error } = await supabase
+        .from('sessions')
+        .update(updates)
+        .eq('id', sessionId)
+      
+      if (error) throw error
+      
+      await loadSessions()
+      setEditingSession(null)
+    } catch (error) {
+      console.error('Error updating session:', error)
+      alert('Failed to update session')
+    }
+  }
+
+  const handleDeleteSession = async (sessionId) => {
+    if (!window.confirm('Delete this session?')) return
+    
+    try {
+      const { error } = await supabase
+        .from('sessions')
+        .delete()
+        .eq('id', sessionId)
+      
+      if (error) throw error
+      
+      await loadSessions()
+    } catch (error) {
+      console.error('Error deleting session:', error)
+      alert('Failed to delete session')
+    }
   }
 
   const handleExportData = () => {
@@ -1009,8 +1017,61 @@ function App() {
 
             {reportTab === 'detail' && (
               <div className="report-body">
-                <h2>Session Details</h2>
-                <p className="placeholder-text">Session history will appear here</p>
+                <h2>Session History</h2>
+                {sessions.length === 0 ? (
+                  <p className="placeholder-text">No sessions yet</p>
+                ) : (
+                  <div className="session-list">
+                    {sessions.map(session => (
+                      <div key={session.id} className="session-item">
+                        {editingSession === session.id ? (
+                          <div className="session-edit-form">
+                            <input
+                              type="number"
+                              defaultValue={session.duration}
+                              min="1"
+                              placeholder="Duration (min)"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleEditSession(session.id, {
+                                    duration: parseInt(e.target.value)
+                                  })
+                                }
+                              }}
+                            />
+                            <select
+                              defaultValue={session.tag}
+                              onChange={(e) => {
+                                handleEditSession(session.id, {
+                                  tag: e.target.value
+                                })
+                              }}
+                            >
+                              {savedTags.map(tag => (
+                                <option key={tag} value={tag}>{tag}</option>
+                              ))}
+                            </select>
+                            <button onClick={() => setEditingSession(null)}>Cancel</button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="session-info">
+                              <div className="session-time">{session.timestamp}</div>
+                              <div className="session-details">
+                                <span className="session-tag">{session.tag}</span>
+                                <span className="session-duration">{session.duration} min</span>
+                              </div>
+                            </div>
+                            <div className="session-actions">
+                              <button onClick={() => setEditingSession(session.id)}>Edit</button>
+                              <button onClick={() => handleDeleteSession(session.id)}>Delete</button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
