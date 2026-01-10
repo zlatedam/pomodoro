@@ -416,7 +416,6 @@ function App() {
         return
       }
       
-      // Merge by date+tag
       const merged = {}
       
       sessions.forEach(session => {
@@ -440,7 +439,6 @@ function App() {
         }
       })
       
-      // Convert to session format and upload to Supabase
       const newSessions = Object.values(merged).map(item => ({
         timestamp: `${item.date} 00:00`,
         date: item.date,
@@ -450,15 +448,13 @@ function App() {
       }))
       
       try {
-        // Delete existing sessions
         const { error: deleteError } = await supabase
           .from('sessions')
           .delete()
-          .neq('id', 0) // Delete all
+          .neq('id', 0)
         
         if (deleteError) throw deleteError
         
-        // Insert new sessions
         const { data, error } = await supabase
           .from('sessions')
           .insert(newSessions)
@@ -466,7 +462,6 @@ function App() {
         
         if (error) throw error
         
-        // Extract unique tags
         const allTags = new Set(savedTags)
         newSessions.forEach(session => allTags.add(session.tag))
         setSavedTags(Array.from(allTags))
@@ -737,5 +732,402 @@ function App() {
 
   return (
     <div className={`app ${activeTheme}`}>
-      {/* Rest of JSX stays exactly the same - just the data handling changed above */}
-      {/* I'll continue in next message with the full JSX... */}
+      <header>
+        <h1>My Pomodoro</h1>
+        <div className="header-actions">
+          <button className="header-btn" onClick={() => setShowReport(true)}>
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M1 11a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-3zm5-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7zm5-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V2z"/>
+            </svg>
+            Report
+          </button>
+          <button className="header-btn" onClick={() => setShowSettings(true)}>
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+              <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319z"/>
+            </svg>
+            Settings
+          </button>
+          <button className="header-btn icon-only" onClick={() => setShowDataModal(true)}>
+            Z
+          </button>
+        </div>
+      </header>
+      
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="*"
+        style={{ display: 'none' }}
+        onChange={handleFileUpload}
+      />
+      
+      {showReport && (
+        <div className="settings-modal" onClick={() => setShowReport(false)}>
+          <div className="report-content" onClick={(e) => e.stopPropagation()}>
+            <div className="report-header">
+              <div className="report-tabs">
+                <button 
+                  className={reportTab === 'summary' ? 'active' : ''}
+                  onClick={() => setReportTab('summary')}
+                >
+                  Summary
+                </button>
+                <button 
+                  className={reportTab === 'detail' ? 'active' : ''}
+                  onClick={() => setReportTab('detail')}
+                >
+                  Detail
+                </button>
+              </div>
+              <button className="close-icon" onClick={() => setShowReport(false)}>×</button>
+            </div>
+
+            {reportTab === 'summary' && (
+              <div className="report-body">
+                <h2>Activity Summary</h2>
+                <div className="activity-cards">
+                  <div className="activity-card">
+                    <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
+                      <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/>
+                    </svg>
+                    <div className="activity-value">{stats.hoursFocused}</div>
+                    <div className="activity-label">hours focused</div>
+                  </div>
+                  <div className="activity-card">
+                    <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/>
+                    </svg>
+                    <div className="activity-value">{stats.daysAccessed}</div>
+                    <div className="activity-label">days accessed</div>
+                  </div>
+                  <div className="activity-card">
+                    <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M8.5 5.6a.5.5 0 1 0-1 0v2.9h-3a.5.5 0 0 0 0 1H8a.5.5 0 0 0 .5-.5V5.6z"/>
+                      <path d="M6.5 1A.5.5 0 0 1 7 .5h2a.5.5 0 0 1 0 1v.57c1.36.196 2.594.78 3.584 1.64a.715.715 0 0 1 .012-.013l.354-.354-.354-.353a.5.5 0 0 1 .707-.708l1.414 1.415a.5.5 0 1 1-.707.707l-.353-.354-.354.354a.512.512 0 0 1-.013.012A7 7 0 1 1 7 2.071V1.5a.5.5 0 0 1-.5-.5zM8 3a6 6 0 1 0 .001 12A6 6 0 0 0 8 3z"/>
+                    </svg>
+                    <div className="activity-value">{stats.dayStreak}</div>
+                    <div className="activity-label">day streak</div>
+                  </div>
+                </div>
+
+                <h3 className="section-title">Focus Hours</h3>
+                <div className="chart-controls">
+                  <div className="chart-view-toggle">
+                    <button 
+                      className={chartView === 'week' ? 'active' : ''}
+                      onClick={() => {
+                        setChartView('week')
+                        setChartOffset(0)
+                      }}
+                    >
+                      Week
+                    </button>
+                    <button 
+                      className={chartView === 'month' ? 'active' : ''}
+                      onClick={() => {
+                        setChartView('month')
+                        setChartOffset(0)
+                      }}
+                    >
+                      Month
+                    </button>
+                    <button 
+                      className={chartView === 'year' ? 'active' : ''}
+                      onClick={() => {
+                        setChartView('year')
+                        setChartOffset(0)
+                      }}
+                    >
+                      Year
+                    </button>
+                  </div>
+                  <div className="chart-navigation">
+                    <button onClick={() => setChartOffset(chartOffset - 1)}>&lt;</button>
+                    <span>{getChartDateLabel()}</span>
+                    <button onClick={() => setChartOffset(chartOffset + 1)}>&gt;</button>
+                  </div>
+                </div>
+
+                {renderChart()}
+
+                {projectData.length > 0 && (
+                  <div className="project-breakdown">
+                    <div className="project-header">
+                      <span>PROJECT</span>
+                      <span>TIME(HH:MM)</span>
+                    </div>
+                    {projectData.map((project, index) => (
+                      <div key={index} className="project-row">
+                        <span>{project.tag}</span>
+                        <span>{project.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {reportTab === 'detail' && (
+              <div className="report-body">
+                <h2>Session Details</h2>
+                <p className="placeholder-text">Session history will appear here</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showDataModal && (
+        <div className="settings-modal" onClick={() => setShowDataModal(false)}>
+          <div className="settings-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Data Management</h2>
+            
+            <div className="setting-group">
+              <h3>Export Data</h3>
+              <button className="data-action-btn" onClick={handleExportData}>
+                Download CSV
+              </button>
+              <p className="data-note">{sessions.length} sessions stored</p>
+            </div>
+
+            <div className="setting-group">
+              <h3>Import Data</h3>
+              <button className="data-action-btn" onClick={handleImportData}>
+                Upload CSV
+              </button>
+              <p className="data-note">Supports Pomofocus & Goodtime formats</p>
+            </div>
+
+            <button className="close-settings" onClick={() => setShowDataModal(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showSettings && (
+        <div className="settings-modal" onClick={() => setShowSettings(false)}>
+          <div className="settings-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Settings</h2>
+            
+            <div className="setting-group">
+              <h3>Timer</h3>
+              <div className="timer-settings">
+                <div className="timer-input-group">
+                  <label>Pomodoro</label>
+                  <input 
+                    type="number" 
+                    value={pomodoroDuration}
+                    onChange={(e) => handlePomodoroDurationChange(Number(e.target.value))}
+                    min="1"
+                    max="60"
+                  />
+                </div>
+                <div className="timer-input-group">
+                  <label>Short Break</label>
+                  <input 
+                    type="number" 
+                    value={shortBreakDuration}
+                    onChange={(e) => handleShortBreakDurationChange(Number(e.target.value))}
+                    min="1"
+                    max="60"
+                  />
+                </div>
+                <div className="timer-input-group">
+                  <label>Long Break</label>
+                  <input 
+                    type="number" 
+                    value={longBreakDuration}
+                    onChange={(e) => handleLongBreakDurationChange(Number(e.target.value))}
+                    min="1"
+                    max="60"
+                  />
+                </div>
+              </div>
+              
+              <div className="toggle-setting">
+                <label>Auto Start Breaks</label>
+                <input 
+                  type="checkbox"
+                  checked={autoStartBreaks}
+                  onChange={(e) => setAutoStartBreaks(e.target.checked)}
+                />
+              </div>
+              
+              <div className="toggle-setting">
+                <label>Auto Start Pomodoros</label>
+                <input 
+                  type="checkbox"
+                  checked={autoStartPomodoros}
+                  onChange={(e) => setAutoStartPomodoros(e.target.checked)}
+                />
+              </div>
+              
+              <div className="toggle-setting">
+                <label>Long Break Interval</label>
+                <input 
+                  type="number"
+                  value={longBreakInterval}
+                  onChange={(e) => setLongBreakInterval(Number(e.target.value))}
+                  min="1"
+                  max="10"
+                />
+              </div>
+            </div>
+
+            <div className="setting-group">
+              <h3>Theme</h3>
+              <div className="theme-options">
+                <button 
+                  className={theme === 'device' ? 'active' : ''}
+                  onClick={() => setTheme('device')}
+                >
+                  Follow Device
+                </button>
+                <button 
+                  className={theme === 'light' ? 'active' : ''}
+                  onClick={() => setTheme('light')}
+                >
+                  Light
+                </button>
+                <button 
+                  className={theme === 'dark' ? 'active' : ''}
+                  onClick={() => setTheme('dark')}
+                >
+                  Dark
+                </button>
+              </div>
+              <p className="theme-note">Timer automatically uses dark mode when running</p>
+            </div>
+
+            <button 
+              className="close-settings"
+              onClick={() => setShowSettings(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showTagModal && (
+        <div className="settings-modal" onClick={() => setShowTagModal(false)}>
+          <div className="settings-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Edit Session Tag</h2>
+            
+            <div className="setting-group">
+              <h3>Current Session</h3>
+              <div className="tag-bubbles">
+                {savedTags.map(tag => (
+                  <button
+                    key={tag}
+                    className={`tag-bubble ${tempTagValue === tag ? 'active' : ''}`}
+                    onClick={() => setTempTagValue(tag)}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="setting-group">
+              <h3>Previously Used Tags</h3>
+              <div className="saved-tags-list">
+                {savedTags.map(tag => (
+                  <div key={tag} className="saved-tag-item">
+                    {editingTag === tag ? (
+                      <>
+                        <input 
+                          type="text"
+                          defaultValue={tag}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleEditSavedTag(tag, e.target.value)
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <button onClick={() => setEditingTag(null)}>Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="tag-name">{tag}</span>
+                        <div className="tag-actions">
+                          <button onClick={() => setEditingTag(tag)}>Edit</button>
+                          <button onClick={() => handleDeleteTag(tag)}>Delete</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="save-btn" onClick={() => {
+                handleSaveCurrentTag()
+                setShowTagModal(false)
+              }}>
+                Save
+              </button>
+              <button className="cancel-btn" onClick={() => setShowTagModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <main>
+        <div className="timer-section">
+          <div className="mode-selector">
+            <button 
+              className={mode === 'pomodoro' ? 'active' : ''}
+              onClick={() => switchMode('pomodoro')}
+            >
+              Pomodoro
+            </button>
+            <button 
+              className={mode === 'shortBreak' ? 'active' : ''}
+              onClick={() => switchMode('shortBreak')}
+            >
+              Short Break
+            </button>
+            <button 
+              className={mode === 'longBreak' ? 'active' : ''}
+              onClick={() => switchMode('longBreak')}
+            >
+              Long Break
+            </button>
+          </div>
+          
+          {mode === 'pomodoro' && (
+            <div className="current-tag">
+              {currentTag}
+              <button className="edit-tag-btn" onClick={openTagModal}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/>
+                </svg>
+              </button>
+            </div>
+          )}
+          
+          <div className="timer-display">{formatTime(timeLeft)}</div>
+          
+          <div className="timer-controls">
+            <button onClick={handleStartPause} className="start-btn">
+              {isRunning ? 'Pause' : 'Start'}
+            </button>
+            <button onClick={handleReset} className="reset-btn">
+              Reset
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+export default App
